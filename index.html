@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>Device Companion Admin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="shell">
+  <header><div class="mark">◈</div><div><p class="eyebrow">DEVICE COMPANION</p><h1>Control center</h1><p class="muted">Private device management</p></div></header>
+  <section id="loginCard" class="panel">
+    <h2>Sign in</h2>
+    <label>Worker API URL<input id="apiUrl" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="url"></label>
+    <label>Admin password<input id="password" type="password" autocomplete="current-password" placeholder="Cloudflare ADMIN_PASSWORD"></label>
+    <button id="loginBtn">Sign in securely</button><p id="loginMessage" class="message"></p>
+  </section>
+  <section id="dashboard" hidden>
+    <div class="toolbar"><div><h2>Devices</h2><p class="muted">Commands may take a short time to arrive.</p></div><button id="logoutBtn" class="secondary">Sign out</button></div>
+    <section class="panel register">
+      <h3>Register a phone</h3>
+      <div class="inline"><input id="deviceLabel" placeholder="Friendly name, e.g. My phone"><button id="registerBtn">Register device</button></div>
+      <div id="tokenReveal" class="token" hidden></div>
+      <p class="hint">The device token is shown once. Copy it into the Android app and keep it private.</p>
+    </section>
+    <div id="devices" class="device-list"></div>
+    <p id="dashboardMessage" class="message"></p>
+  </section>
+  <footer>Owner-authorized use only · Screenshot requests require on-phone approval · Lock requires Device Admin</footer>
+</main>
+<script src="app.js"></script>
+</body></html>
