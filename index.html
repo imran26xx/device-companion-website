@@ -1,31 +1,10 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark"><title>Device Companion Admin</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<main class="shell">
-  <header><div class="mark">◈</div><div><p class="eyebrow">DEVICE COMPANION</p><h1>Control center</h1><p class="muted">Private device management</p></div></header>
-  <section id="loginCard" class="panel">
-    <h2>Sign in</h2>
-    <label>Worker API URL<input id="apiUrl" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="url"></label>
-    <label>Admin password<input id="password" type="password" autocomplete="current-password" placeholder="Cloudflare ADMIN_PASSWORD"></label>
-    <button id="loginBtn">Sign in securely</button><p id="loginMessage" class="message"></p>
-  </section>
-  <section id="dashboard" hidden>
-    <div class="toolbar"><div><h2>Devices</h2><p class="muted">Commands may take a short time to arrive.</p></div><button id="logoutBtn" class="secondary">Sign out</button></div>
-    <section class="panel register">
-      <h3>Register a phone</h3>
-      <div class="inline"><input id="deviceLabel" placeholder="Friendly name, e.g. My phone"><button id="registerBtn">Register device</button></div>
-      <div id="tokenReveal" class="token" hidden></div>
-      <p class="hint">The device token is shown once. Copy it into the Android app and keep it private.</p>
-    </section>
-    <div id="devices" class="device-list"></div>
-    <p id="dashboardMessage" class="message"></p>
-  </section>
-  <footer>Owner-authorized use only · Screenshot requests require on-phone approval · Lock requires Device Admin</footer>
-</main>
-<script src="app.js"></script>
-</body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101827"><title>Device Companion — Command Center</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="shell"><aside class="sidebar"><div class="brand"><div class="logo">DC</div><div><b>Device Companion</b><small>CORE DEVELOPER EDITION</small></div></div><div class="nav active">⌂ &nbsp; Overview</div><div class="nav">▣ &nbsp; Devices</div><div class="side-note"><span class="dot"></span> Secure API connection<br><small>Owner-authorized commands only</small></div><div class="side-bottom">Built for transparent, consent-based device management.</div></aside><main><header><div><p class="kicker">CONTROL CENTER / OVERVIEW</p><h1>Device command center</h1><p class="muted">Monitor your registered phones and send owner-approved commands.</p></div><div id="apiState" class="pill">● Not connected</div></header>
+<section id="loginPanel" class="panel login"><div><p class="kicker">ADMIN ACCESS</p><h2>Sign in securely</h2><p class="muted">Use the administrator password configured as a Cloudflare Worker secret.</p></div><form id="loginForm"><label>Worker API URL<input id="apiUrl" type="url" placeholder="https://your-worker.workers.dev" required></label><label>Admin password<input id="password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Sign in <span>→</span></button><p id="loginError" class="error"></p></form></section>
+<div id="appPanel" hidden><section class="metrics"><div class="metric"><span>Registered devices</span><b id="deviceCount">0</b><small>Owner-registered</small></div><div class="metric"><span>Online recently</span><b id="onlineCount">0</b><small>Heartbeat within 3 minutes</small></div><div class="metric"><span>Last refresh</span><b id="lastRefresh">—</b><small>Dashboard polling</small></div></section>
+<section class="panel"><div class="section-head"><div><p class="kicker">DEVICE INVENTORY</p><h2>Your devices</h2></div><button id="refresh" class="secondary">↻ Refresh</button></div><div id="devices" class="device-grid"><div class="empty">No devices registered yet.</div></div></section>
+<section class="panel"><div class="section-head"><div><p class="kicker">PAIR A PHONE</p><h2>Register new device</h2><p class="muted">A device token is shown once. Copy it into the Android app and keep it private.</p></div></div><form id="registerForm" class="register-row"><label>Device label<input id="deviceLabel" maxlength="80" value="My Android phone" required></label><button class="primary" type="submit">＋ Register device</button></form><div id="newDevice" hidden class="secret-box"><b>Copy these credentials now</b><p id="newDeviceId"></p><p id="newDeviceToken"></p><button id="copyCredentials" class="secondary" type="button">Copy credentials</button><p class="warning">The token cannot be retrieved later. Do not share it or post screenshots containing it.</p></div></section>
+<section class="panel"><div class="section-head"><div><p class="kicker">REMOTE ACTIONS</p><h2>Send a command</h2><p class="muted">Choose a registered device. Lock requires Device Admin. Usage reporting requires explicit on-device opt-in and Android Usage Access.</p></div></div><form id="commandForm" class="command-form"><label>Target device<select id="targetDevice" required><option value="">Choose a device…</option></select></label><label>Command<select id="commandType"><option value="ring">Ring phone</option><option value="vibrate">Vibrate phone</option><option value="lock">Lock phone</option><option value="notify_text">Send text notification</option><option value="notify_image">Send image notification</option><option value="usage_report">Request optional usage report</option></select></label><label id="titleWrap">Notification title<input id="commandTitle" maxlength="80" value="Device Companion"></label><label id="messageWrap">Message<input id="commandMessage" maxlength="240" placeholder="Write a short message"></label><label id="imageWrap" hidden>HTTPS image URL<input id="imageUrl" type="url" placeholder="https://example.com/image.jpg"></label><button class="primary" type="submit">Queue command <span>→</span></button><p id="commandFeedback" class="feedback"></p></form></section>
+<section class="panel"><div class="section-head"><div><p class="kicker">LIVE DIAGNOSTICS</p><h2>Selected device status</h2></div><button id="refreshStatus" class="secondary">Refresh status</button></div><div id="statusView" class="status-view"><div class="empty">Select a device to inspect its latest heartbeat and command result.</div></div></section><div class="footer-row"><span>Device Companion • Core Developer Edition</span><button id="logout" class="text-button">Sign out</button></div></div>
+<div id="toast" role="status" aria-live="polite"></div></main></div><script src="app.js"></script></body></html>

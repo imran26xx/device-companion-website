@@ -1,71 +1,20 @@
-const $ = (id) => document.getElementById(id);
-let api = sessionStorage.getItem("dc_api") || "";
-let jwt = sessionStorage.getItem("dc_jwt") || "";
-$("apiUrl").value = api;
-const cleanApi = () => $("apiUrl").value.trim().replace(/\/+$/,"");
-async function call(path, options={}) {
-  const res = await fetch(cleanApi()+path, { ...options, headers: {
-    "content-type":"application/json", ...(jwt ? {authorization:"Bearer "+jwt}:{}), ...(options.headers||{})
-  }});
-  const data = await res.json().catch(()=>({error:"Unexpected server response"}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
-function msg(id, text, error=false){$(id).textContent=text;$(id).classList.toggle("error",error)}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-let refreshTimer = null;
-function showDashboard(){
-  $("loginCard").hidden=true; $("dashboard").hidden=false; loadDevices();
-  if (refreshTimer) clearInterval(refreshTimer);
-  // GitHub-backed status storage is relatively slow; refresh modestly to avoid API churn.
-  refreshTimer = setInterval(() => { if (jwt && !document.hidden) loadDevices(); }, 30000);
-}
-function showLogin(){
-  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-  $("loginCard").hidden=false; $("dashboard").hidden=true;
-}
-$("loginBtn").addEventListener("click", async()=>{
-  api=cleanApi(); if(!/^https:\/\/[^/]+/.test(api)){msg("loginMessage","Enter your deployed HTTPS Worker URL.",true);return}
-  $("loginBtn").disabled=true;
-  try {const r=await call("/admin/login",{method:"POST",headers:{},body:JSON.stringify({password:$("password").value})});
-    jwt=r.token;sessionStorage.setItem("dc_api",api);sessionStorage.setItem("dc_jwt",jwt);showDashboard();msg("loginMessage","");}
-  catch(e){msg("loginMessage",e.message,true)} finally{$("loginBtn").disabled=false}
-});
-$("logoutBtn").addEventListener("click",()=>{jwt="";sessionStorage.removeItem("dc_jwt");showLogin()});
-$("registerBtn").addEventListener("click",async()=>{
-  $("registerBtn").disabled=true;
-  try {const r=await call("/admin/devices",{method:"POST",body:JSON.stringify({label:$("deviceLabel").value.trim()||"Android phone"})});
-    $("tokenReveal").hidden=false;
-    $("tokenReveal").innerHTML=`<strong>Copy these into the Android app now</strong><p>Device ID</p><code>${esc(r.deviceId)}</code><button class="copy" data-copy="${esc(r.deviceId)}">Copy ID</button><p>Device token (shown once)</p><code>${esc(r.deviceToken)}</code><button class="copy" data-copy="${esc(r.deviceToken)}">Copy token</button>`;
-    $("tokenReveal").querySelectorAll(".copy").forEach(b=>b.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied"}catch{alert("Select and copy the value manually.")}}));
-    msg("dashboardMessage","Device registered. Copy its token before leaving this page.");await loadDevices();
-  } catch(e){msg("dashboardMessage",e.message,true)} finally{$("registerBtn").disabled=false}
-});
-async function loadDevices(){
-  try {const r=await call("/admin/devices");const wrap=$("devices");wrap.innerHTML="";
-    if(!r.devices.length){wrap.innerHTML='<div class="panel muted">No devices registered yet.</div>';return}
-    for(const d of r.devices){
-      const card=document.createElement("article");card.className="device";
-      card.innerHTML=`<div class="device-head"><div><h3>${esc(d.label||"Android phone")}</h3><div class="status">${esc(d.deviceId)} · Registered ${esc((d.createdAt||"").slice(0,10))}</div></div><button class="secondary refresh">Refresh status</button></div><div class="status result">Status not loaded</div><div class="actions"><button data-type="ring">Ring</button><button data-type="vibrate">Vibrate</button><button data-type="lock" class="lock">Lock phone</button><button data-type="screenshot" class="screenshot">Request screenshot</button></div>`;
-      card.querySelector(".refresh").addEventListener("click",()=>loadStatus(d.deviceId,card));
-      card.querySelectorAll("[data-type]").forEach(b=>b.addEventListener("click",()=>sendCommand(d.deviceId,b.dataset.type,b)));
-      wrap.append(card);loadStatus(d.deviceId,card);
-    }
-  } catch(e){msg("dashboardMessage",e.message,true)}
-}
-async function loadStatus(id,card){try{const r=await call("/admin/status?deviceId="+encodeURIComponent(id));const s=r.status;
- if (!s) { card.querySelector(".result").innerHTML = 'No status yet'; return; }
- const battery = Number.isFinite(Number(s.batteryPercent))
-   ? ` · Battery: ${Math.max(0,Math.min(100,Number(s.batteryPercent)))}%${s.charging === true ? ' (charging)' : s.charging === false ? ' (not charging)' : ''}`
-   : (Number.isFinite(Number(s.batteryLevel)) ? ` · Battery: ${Math.max(0,Math.min(100,Number(s.batteryLevel)))}%` : ' · Battery: waiting for phone update');
- const batteryTime = s.batteryUpdatedAt ? ` · Battery updated: ${s.batteryUpdatedAt}` : '';
- card.querySelector(".result").innerHTML = `${esc(s.online?"Recently connected":"No recent connection")} · Last seen: ${esc(s.lastSeen||"never")}${esc(battery)}${esc(batteryTime)}${s.lastCommand?` · Last command: ${esc(s.lastCommand.status)} ${esc(s.lastCommand.message||"")}`:""}`;
- }catch(e){card.querySelector(".result").textContent=e.message}}
-async function sendCommand(deviceId,type,button){
- const labels={ring:"Ring this phone?",vibrate:"Vibrate this phone?",lock:"Lock this phone? This requires Device Admin already enabled on the phone.",screenshot:"Request a screenshot? The phone must be opened and the Android capture prompt approved."};
- if(!confirm(labels[type]))return;
- button.disabled=true;
- try{const r=await call("/admin/commands",{method:"POST",body:JSON.stringify({deviceId,type})});msg("dashboardMessage",`${type} request queued (${r.command.id}).`);setTimeout(()=>loadDevices(),1200)}
- catch(e){msg("dashboardMessage",e.message,true)}finally{button.disabled=false}
-}
-if(jwt&&api){$("apiUrl").value=api;showDashboard()}else showLogin();
+(() => {
+  const $ = id => document.getElementById(id);
+  let api = '', token = '', devices = [], selected = '';
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),3500)}
+  async function request(path, options={}) { const res=await fetch(api+path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(options.headers||{})}});let data={};try{data=await res.json()}catch{}if(!res.ok)throw new Error(data.error||`Request failed (${res.status})`);return data; }
+  function signedIn(){ $('loginPanel').hidden=true;$('appPanel').hidden=false;$('apiState').textContent='● Connected';$('apiState').style.color='#16835f'; }
+  async function login(e){e.preventDefault();api=$('apiUrl').value.trim().replace(/\/+$/,'');if(!api.startsWith('https://')){$('loginError').textContent='Use an HTTPS Worker URL.';return}try{const d=await request('/admin/login',{method:'POST',body:JSON.stringify({password:$('password').value})});token=d.token;sessionStorage.setItem('dc_api',api);sessionStorage.setItem('dc_token',token);signedIn();await loadDevices();}catch(err){$('loginError').textContent=err.message}}
+  async function loadDevices(){try{const d=await request('/admin/devices');devices=d.devices||[];$('deviceCount').textContent=devices.length;const opts=devices.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.label)} — ${esc(d.deviceId)}</option>`).join('');$('targetDevice').innerHTML='<option value="">Choose a device…</option>'+opts;if(selected&&devices.some(d=>d.deviceId===selected))$('targetDevice').value=selected;else selected=$('targetDevice').value;renderDevices();$('lastRefresh').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});$('apiState').textContent='● API healthy';$('apiState').style.color='#16835f';if(selected)await loadStatus();}catch(e){$('apiState').textContent='● API error';$('apiState').style.color='#b42318';toast(e.message)}}
+  function renderDevices(){const root=$('devices');if(!devices.length){root.innerHTML='<div class="empty">No devices registered yet. Register your phone below, then enter its credentials in the Android app.</div>';return}root.innerHTML=devices.map(d=>`<div class="device-card ${selected===d.deviceId?'selected':''}" data-id="${esc(d.deviceId)}"><div class="name">▣ &nbsp;${esc(d.label||'Android phone')}</div><div class="id">${esc(d.deviceId)}</div><div class="meta">Registered ${d.createdAt?new Date(d.createdAt).toLocaleDateString():'—'}</div><div style="margin-top:12px"><span class="state">● Status available on refresh</span></div></div>`).join('');root.querySelectorAll('.device-card').forEach(c=>c.addEventListener('click',()=>{selected=c.dataset.id;$('targetDevice').value=selected;renderDevices();loadStatus()}))}
+  async function loadStatus(){if(!selected){$('statusView').innerHTML='<div class="empty">Choose a device to see status.</div>';return}try{const d=await request('/admin/status?deviceId='+encodeURIComponent(selected));const s=d.status;if(!s){$('statusView').innerHTML='<div class="empty">No status received yet. Open Device Companion on the phone and start the connection service.</div>';return}const recent=s.lastSeen&&Date.now()-new Date(s.lastSeen).getTime()<180000;$('onlineCount').textContent=devices.filter(x=>x.deviceId===selected&&recent).length;const vals=[['Connection',recent?'Online':'Not recently seen'],['Last seen',s.lastSeen?new Date(s.lastSeen).toLocaleString():'Never'],['Battery',Number.isInteger(s.batteryLevel)?s.batteryLevel+'%':'Not reported'],['Charging',s.charging===true?'Charging':s.charging===false?'Not charging':'Unknown'],['Service state',s.serviceState||'Unknown'],['App version',s.appVersion||'—']];$('statusView').innerHTML='<div class="status-grid">'+vals.map(([k,v])=>`<div class="status-item"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')+'</div>'+(s.lastCommand?`<div class="last-command"><b>Last command · ${esc(s.lastCommand.status||'unknown')}</b><p>${esc(s.lastCommand.message||'No details')}</p><p>${esc(s.lastCommand.updatedAt?new Date(s.lastCommand.updatedAt).toLocaleString():'')}</p></div>`:'<div class="last-command"><b>No command result yet</b><p>Results appear after the phone receives a command.</p></div>');}catch(e){$('statusView').innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+  $('loginForm').addEventListener('submit',login);
+  $('registerForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await request('/admin/devices',{method:'POST',body:JSON.stringify({label:$('deviceLabel').value.trim()})});$('newDevice').hidden=false;$('newDeviceId').textContent='Device ID: '+d.deviceId;$('newDeviceToken').textContent='Device token: '+d.deviceToken;selected=d.deviceId;await loadDevices();$('targetDevice').value=selected;renderDevices();toast('Device registered. Copy its token now.')}catch(err){toast(err.message)}});
+  $('copyCredentials').addEventListener('click',async()=>{const s='Worker URL: '+api+'\nDevice ID: '+$('newDeviceId').textContent.replace('Device ID: ','')+'\nDevice token: '+$('newDeviceToken').textContent.replace('Device token: ','');try{await navigator.clipboard.writeText(s);toast('Credentials copied. Keep them private.')}catch{toast('Clipboard unavailable; copy the credentials manually.')}});
+  $('commandType').addEventListener('change',()=>{const t=$('commandType').value;const notif=t==='notify_text'||t==='notify_image';$('titleWrap').hidden=!notif;$('messageWrap').hidden=!notif;$('imageWrap').hidden=t!=='notify_image'});
+  $('commandForm').addEventListener('submit',async e=>{e.preventDefault();const type=$('commandType').value,deviceId=$('targetDevice').value;if(!deviceId){toast('Register or choose a device first.');return}const body={deviceId,type,title:$('commandTitle').value,message:$('commandMessage').value};if(type==='notify_image')body.imageUrl=$('imageUrl').value.trim();if(type==='notify_image'&&!body.imageUrl.startsWith('https://')){toast('Image URL must use HTTPS.');return}try{const d=await request('/admin/commands',{method:'POST',body:JSON.stringify(body)});$('commandFeedback').textContent=`Queued ${type} · ${d.command.id}. The phone must be connected to receive it.`;toast('Command queued');}catch(err){$('commandFeedback').textContent=err.message;toast(err.message)}});
+  $('refresh').addEventListener('click',loadDevices);$('refreshStatus').addEventListener('click',loadStatus);$('targetDevice').addEventListener('change',()=>{selected=$('targetDevice').value;renderDevices();loadStatus()});$('logout').addEventListener('click',()=>{sessionStorage.removeItem('dc_token');sessionStorage.removeItem('dc_api');location.reload()});
+  api=sessionStorage.getItem('dc_api')||'';token=sessionStorage.getItem('dc_token')||'';$('apiUrl').value=api;
+  if(api&&token){request('/admin/devices').then(d=>{devices=d.devices||[];signedIn();renderDevices();loadDevices()}).catch(()=>{token='';sessionStorage.removeItem('dc_token')})}
+})();
