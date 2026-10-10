@@ -13,8 +13,17 @@ async function call(path, options={}) {
 }
 function msg(id, text, error=false){$(id).textContent=text;$(id).classList.toggle("error",error)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function showDashboard(){ $("loginCard").hidden=true; $("dashboard").hidden=false; loadDevices(); }
-function showLogin(){ $("loginCard").hidden=false; $("dashboard").hidden=true; }
+let refreshTimer = null;
+function showDashboard(){
+  $("loginCard").hidden=true; $("dashboard").hidden=false; loadDevices();
+  if (refreshTimer) clearInterval(refreshTimer);
+  // GitHub-backed status storage is relatively slow; refresh modestly to avoid API churn.
+  refreshTimer = setInterval(() => { if (jwt && !document.hidden) loadDevices(); }, 30000);
+}
+function showLogin(){
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  $("loginCard").hidden=false; $("dashboard").hidden=true;
+}
 $("loginBtn").addEventListener("click", async()=>{
   api=cleanApi(); if(!/^https:\/\/[^/]+/.test(api)){msg("loginMessage","Enter your deployed HTTPS Worker URL.",true);return}
   $("loginBtn").disabled=true;
@@ -45,7 +54,12 @@ async function loadDevices(){
   } catch(e){msg("dashboardMessage",e.message,true)}
 }
 async function loadStatus(id,card){try{const r=await call("/admin/status?deviceId="+encodeURIComponent(id));const s=r.status;
- card.querySelector(".result").textContent=s?`${s.online?"Recently connected":"No recent connection"} · Last seen: ${s.lastSeen||"never"}${s.lastCommand?` · Last command: ${s.lastCommand.status} ${s.lastCommand.message||""}`:""}`:"No status yet";
+ if (!s) { card.querySelector(".result").innerHTML = 'No status yet'; return; }
+ const battery = Number.isFinite(Number(s.batteryPercent))
+   ? ` · Battery: ${Math.max(0,Math.min(100,Number(s.batteryPercent)))}%${s.charging === true ? ' (charging)' : s.charging === false ? ' (not charging)' : ''}`
+   : (Number.isFinite(Number(s.batteryLevel)) ? ` · Battery: ${Math.max(0,Math.min(100,Number(s.batteryLevel)))}%` : ' · Battery: waiting for phone update');
+ const batteryTime = s.batteryUpdatedAt ? ` · Battery updated: ${s.batteryUpdatedAt}` : '';
+ card.querySelector(".result").innerHTML = `${esc(s.online?"Recently connected":"No recent connection")} · Last seen: ${esc(s.lastSeen||"never")}${esc(battery)}${esc(batteryTime)}${s.lastCommand?` · Last command: ${esc(s.lastCommand.status)} ${esc(s.lastCommand.message||"")}`:""}`;
  }catch(e){card.querySelector(".result").textContent=e.message}}
 async function sendCommand(deviceId,type,button){
  const labels={ring:"Ring this phone?",vibrate:"Vibrate this phone?",lock:"Lock this phone? This requires Device Admin already enabled on the phone.",screenshot:"Request a screenshot? The phone must be opened and the Android capture prompt approved."};
